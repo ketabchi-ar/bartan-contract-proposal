@@ -6,8 +6,8 @@
 // Global Configuration
 const CONFIG = {
   defaultPhone: "09388873996",
-  clientFirstName: "ملیحه",
-  clientLastName: "آرشام",
+  clientFirstName: "ملیح",
+  clientLastName: "کرمی‌طلب",
   productUrl: "https://palette.agency/bartan-website",
   templateId: 519830,
   apiKey: "LZEXvE6obhG6g6SH6JeiZPgAHb8fjVFUZiAYCIjKscJ2FZGb",
@@ -152,13 +152,13 @@ async function sendOtpCode() {
     }
   }
 
-  // Switch to OTP step
-  document.getElementById('otp-step-phone').classList.remove('active');
-  document.getElementById('otp-step-verify').classList.add('active');
-  document.getElementById('otp-code').value = generatedOtpCode || '';
-  document.getElementById('otp-code').focus();
-  
-  startTimer();
+    // Switch to OTP step with completely EMPTY input
+    document.getElementById('otp-step-phone').classList.remove('active');
+    document.getElementById('otp-step-verify').classList.add('active');
+    document.getElementById('otp-code').value = '';
+    document.getElementById('otp-code').focus();
+    
+    startTimer();
   btn.disabled = false;
   spinner.style.display = 'none';
 }
@@ -251,7 +251,7 @@ async function verifyOtpAndRedirect() {
   if (sigElement) {
     const now = new Date();
     const dateStr = new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium', timeStyle: 'short' }).format(now);
-    sigElement.innerHTML = `<strong>امضا شده توسط سرکار خانم ملیحه آرشام</strong><br><small>تأیید پیامکی OTP به شماره ${phone} در تاریخ ${dateStr}</small>`;
+    sigElement.innerHTML = `<strong>امضا شده توسط سرکار خانم ملیح کرمی‌طلب</strong><br><small>تأیید پیامکی OTP به شماره ${phone} در تاریخ ${dateStr}</small>`;
     sigElement.classList.remove('signed-status-placeholder');
     sigElement.style.background = '#DCFCE7';
     sigElement.style.color = '#166534';

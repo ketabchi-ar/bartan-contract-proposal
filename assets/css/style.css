@@ -1365,25 +1365,172 @@ body {
   }
 }
 
-/* Mobile Responsiveness */
-@media (max-width: 768px) {
+/* Mobile & Tablet Responsiveness Enhancements */
+@media (max-width: 992px) {
+  .contract-wrapper {
+    margin: 16px auto 40px;
+    padding: 0 14px;
+  }
+  
   .official-header {
-    padding: 24px 18px;
+    padding: 28px 20px;
   }
 
   .main-title {
-    font-size: 1.35rem;
+    font-size: 1.45rem;
+    line-height: 1.5;
+  }
+
+  .parties-grid, .two-col-commitments, .payment-options-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .top-nav {
+    padding: 10px 14px;
+  }
+
+  .brand-side .nav-divider,
+  .brand-side .project-pill {
+    display: none;
+  }
+
+  .palette-logo {
+    height: 32px;
+  }
+
+  .btn-secondary.print-btn {
+    display: none; /* Mobile users prefer direct signing */
+  }
+
+  .btn-primary-nav {
+    padding: 7px 14px;
+    font-size: 0.82rem;
+  }
+
+  .header-top-row {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+  }
+
+  .contract-badge-card {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .official-header {
+    padding: 20px 16px;
+    border-radius: var(--radius-md);
+  }
+
+  .main-title {
+    font-size: 1.25rem;
+    line-height: 1.55;
+  }
+
+  .sub-title {
+    font-size: 0.88rem;
+  }
+
+  .highlight-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .hl-card {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .hl-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .hl-val {
+    font-size: 0.92rem;
   }
 
   .contract-article {
-    padding: 22px 16px;
+    padding: 20px 14px;
+    border-radius: var(--radius-md);
+  }
+
+  .article-header {
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .article-title {
+    font-size: 1.05rem;
+  }
+
+  .pages-chips-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .price-summary-banner {
+    padding: 20px 16px;
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .price-digits {
     font-size: 1.6rem;
   }
 
+  .design-gallery-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .img-wrap {
+    height: 180px;
+  }
+
   .action-buttons-group {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .btn-sign {
+    padding: 16px;
+  }
+
+  .btn-headline {
+    font-size: 0.95rem;
+  }
+
+  .btn-subline {
+    font-size: 0.75rem;
+  }
+
+  .signing-card {
+    padding: 24px 16px;
+  }
+
+  .otp-modal-content {
+    padding: 24px 18px;
+    max-width: 95%;
+  }
+
+  .code-input {
+    letter-spacing: 6px;
+    font-size: 1.3rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .highlight-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .party-name {
+    font-size: 1.05rem;
   }
 }

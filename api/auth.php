@@ -100,8 +100,8 @@ if ($action === 'verify_otp') {
     $phone = clean_phone($data['phone'] ?? '');
     $code = trim($data['code'] ?? '');
     $payment_mode = $data['payment_mode'] ?? 'cash';
-    $client_first_name = $data['first_name'] ?? 'ملیحه';
-    $client_last_name = $data['last_name'] ?? 'آرشام';
+    $client_first_name = $data['first_name'] ?? 'ملیح';
+    $client_last_name = $data['last_name'] ?? 'کرمی‌طلب';
 
     $session_data = $_SESSION['contract_otp_' . $phone] ?? null;
 
