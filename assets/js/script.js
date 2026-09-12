@@ -92,6 +92,7 @@ async function sendOtpCode() {
 
   try {
     // Attempt sending via SMS.ir verify endpoint
+    // Sending both Code and VERIFICATIONCODE to match any parameter binding in sms.ir panel
     const response = await fetch('https://api.sms.ir/v1/send/verify', {
       method: 'POST',
       headers: {
@@ -199,10 +200,13 @@ function verifyOtpAndRedirect() {
     }
 
     setTimeout(() => {
-      // Redirect to client's purchase product URL with payment method query
+      // Redirect to client's purchase product URL with payment method query & client phone
+      const enteredPhone = document.getElementById('client-phone').value.trim();
       const targetUrl = new URL(CONFIG.productUrl);
       targetUrl.searchParams.set('payment_mode', currentPaymentMethod);
-      targetUrl.searchParams.set('client_name', 'Maliheh_Arsham');
+      targetUrl.searchParams.set('billing_phone', enteredPhone);
+      targetUrl.searchParams.set('billing_first_name', 'ملیحه');
+      targetUrl.searchParams.set('billing_last_name', 'آرشام');
       targetUrl.searchParams.set('contract_signed', 'true');
       
       window.location.href = targetUrl.toString();
