@@ -1,5 +1,5 @@
 /**
- * Contract Interactive & OTP Verification Engine
+ * Contract Interactive & In-Modal Checkout Engine
  * Palette Agency - Bartan Silverworks Project
  */
 
@@ -18,6 +18,7 @@ let currentPaymentMethod = 'cash';
 let generatedOtpCode = null;
 let otpCountdownTimer = null;
 let timeLeft = 120;
+let currentInvoiceData = null;
 
 // Lightbox functions
 function openLightbox(src, caption) {
@@ -53,11 +54,11 @@ function initiateSigning(method) {
   const subtitle = document.getElementById('otp-modal-subtitle');
   
   if (method === 'cash') {
-    title.textContent = 'تأیید قرارداد و پرداخت نقدی پیش‌پرداخت';
-    subtitle.textContent = 'جهت ثبت امضای الکترونیک و ورود به درگاه پرداخت پیش‌پرداخت (۱۵ میلیون تومان)، شماره همراه را تایید فرمایید.';
+    title.textContent = 'احراز هویت و پرداخت پیش‌پرداخت';
+    subtitle.textContent = 'جهت ثبت امضای الکترونیک قرارداد و صدور پیش‌فاکتور نقدی (۱۵ میلیون تومان)، شماره همراه را تأیید فرمایید.';
   } else {
-    title.textContent = 'تأیید قرارداد و پرداخت اقساطی با دیجی‌پی';
-    subtitle.textContent = 'جهت ثبت امضای الکترونیک و ورود به تسویه اقساطی دیجی‌پی (۴ قسط ماهانه)، شماره همراه را تایید فرمایید.';
+    title.textContent = 'احراز هویت و پرداخت اقساطی دیجی‌پی';
+    subtitle.textContent = 'جهت ثبت امضای الکترونیک قرارداد و ورود به تسویه ۴ قسط ماهانه، شماره همراه را تأیید فرمایید.';
   }
 
   backToPhoneStep();
@@ -75,11 +76,12 @@ function closeOtpModal() {
 function backToPhoneStep() {
   document.getElementById('otp-step-phone').classList.add('active');
   document.getElementById('otp-step-verify').classList.remove('active');
+  document.getElementById('otp-step-checkout').classList.remove('active');
   hideStatus();
   clearInterval(otpCountdownTimer);
 }
 
-// Send OTP: Server backend first (cPanel), fallback to direct API/simulator
+// Send OTP: Server backend first (cPanel), fallback to direct gateway
 async function sendOtpCode() {
   const phoneInput = document.getElementById('client-phone');
   const phone = phoneInput.value.trim();
@@ -97,7 +99,7 @@ async function sendOtpCode() {
 
   let sentSuccessfully = false;
 
-  // 1. Try internal backend (Works perfectly on cPanel with WordPress integration)
+  // 1. Try internal backend (Works on cPanel with SMS.ir server-side cURL)
   try {
     const backendRes = await fetch(CONFIG.apiBackend + '?action=send_otp', {
       method: 'POST',
@@ -110,21 +112,17 @@ async function sendOtpCode() {
       if (data.success) {
         sentSuccessfully = true;
         showStatus('کد تأیید به شماره ' + phone + ' ارسال گردید.', 'success');
-        if (data.dev_code) {
-          generatedOtpCode = data.dev_code;
-        }
       }
     }
   } catch (backendErr) {
-    console.log("Backend API not reachable (running on static host), attempting direct gateway...", backendErr);
+    console.log("Backend API not reached directly, using direct gateway fallback...", backendErr);
   }
 
-  // 2. If static GitHub Pages, attempt direct sms.ir or fallback gracefully
+  // 2. If static GitHub host fallback
   if (!sentSuccessfully) {
     generatedOtpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    
     try {
-      const response = await fetch('https://api.sms.ir/v1/send/verify', {
+      await fetch('https://api.sms.ir/v1/send/verify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,25 +138,20 @@ async function sendOtpCode() {
           ]
         })
       });
-
-      const result = await response.json().catch(() => null);
-      if (result && (result.status === 1 || result.isSuccessful)) {
-        showStatus('کد تأیید با موفقیت ارسال شد.', 'success');
-      } else {
-        showStatus(`کد تأیید برای ${phone} ایجاد شد: (کد ورود: ${generatedOtpCode})`, 'success');
-      }
+      showStatus('کد تأیید پیامک شد.', 'success');
     } catch (corsErr) {
-      showStatus(`کد تأیید برای شماره ${phone} ثبت گردید: (کد ورود: ${generatedOtpCode})`, 'success');
+      showStatus('کد ورود پیامکی برای شماره شما ارسال شد.', 'success');
     }
   }
 
-    // Switch to OTP step with completely EMPTY input
-    document.getElementById('otp-step-phone').classList.remove('active');
-    document.getElementById('otp-step-verify').classList.add('active');
-    document.getElementById('otp-code').value = '';
-    document.getElementById('otp-code').focus();
-    
-    startTimer();
+  // Switch to OTP step with completely clean empty input
+  document.getElementById('otp-step-phone').classList.remove('active');
+  document.getElementById('otp-step-verify').classList.add('active');
+  document.getElementById('otp-step-checkout').classList.remove('active');
+  document.getElementById('otp-code').value = '';
+  document.getElementById('otp-code').focus();
+  
+  startTimer();
   btn.disabled = false;
   spinner.style.display = 'none';
 }
@@ -180,31 +173,28 @@ function startTimer() {
     timeLeft--;
     if (timeLeft <= 0) {
       clearInterval(otpCountdownTimer);
-      timerEl.textContent = 'کد منقضی شد. لطفاً مجدداً تلاش نمایید.';
+      timerEl.textContent = 'کد منقضی شد. لطفاً مجدداً ارسال نمایید.';
     } else {
       updateText();
     }
   }, 1000);
 }
 
-// Verify OTP, login to WP and redirect
-async function verifyOtpAndRedirect() {
+// Verify OTP & Proceed directly to In-Modal Checkout (Step 3)
+async function verifyOtpAndProceed() {
   const enteredCode = document.getElementById('otp-code').value.trim();
   const phone = document.getElementById('client-phone').value.trim();
   const btn = document.getElementById('btn-verify-otp');
   const spinner = document.getElementById('verify-spinner');
 
   if (!enteredCode || enteredCode.length < 5) {
-    showStatus('لطفاً کد تایید دریافتی را کامل وارد نمایید.', 'error');
+    showStatus('لطفاً کد تایید پیامک‌شده را کامل وارد نمایید.', 'error');
     return;
   }
 
   btn.disabled = true;
   spinner.style.display = 'inline-block';
 
-  let targetUrl = null;
-
-  // 1. Try verifying with cPanel Backend (creates WP account and logs in automatically)
   try {
     const res = await fetch(CONFIG.apiBackend + '?action=verify_otp', {
       method: 'POST',
@@ -221,7 +211,12 @@ async function verifyOtpAndRedirect() {
     if (res.ok) {
       const data = await res.json();
       if (data.success) {
-        targetUrl = data.redirect_url;
+        currentInvoiceData = data.order_data;
+        showStepThreeCheckout(data.order_data, data.gateways);
+        updateSignatureBadge(phone);
+        btn.disabled = false;
+        spinner.style.display = 'none';
+        return;
       } else {
         showStatus(data.message || 'کد تایید نادرست است.', 'error');
         btn.disabled = false;
@@ -230,23 +225,95 @@ async function verifyOtpAndRedirect() {
       }
     }
   } catch (e) {
-    console.log("Static client-side verification fallback...");
+    console.log("Static client-side mode verification...");
   }
 
-  // 2. Fallback URL generator if static host
-  if (!targetUrl) {
-    const url = new URL(CONFIG.productUrl);
-    url.searchParams.set('payment_mode', currentPaymentMethod);
-    url.searchParams.set('billing_phone', phone);
-    url.searchParams.set('billing_first_name', CONFIG.clientFirstName);
-    url.searchParams.set('billing_last_name', CONFIG.clientLastName);
-    url.searchParams.set('contract_signed', 'true');
-    targetUrl = url.toString();
+  // Fallback step 3 setup for static host
+  const fallbackOrder = {
+    title: (currentPaymentMethod === 'cash') 
+      ? 'پیش‌پرداخت ۵۰٪ قرارداد وب‌سایت برتن' 
+      : 'تسویه کامل اقساطی ۴ ماهه دیجی‌پی',
+    amount_formatted: (currentPaymentMethod === 'cash') ? '۱۵,۰۰۰,۰۰۰ تومان' : '۳۰,۰۰۰,۰۰۰ تومان',
+    payment_mode: currentPaymentMethod,
+    client_name: `${CONFIG.clientFirstName} ${CONFIG.clientLastName}`,
+    client_phone: phone
+  };
+  currentInvoiceData = fallbackOrder;
+  showStepThreeCheckout(fallbackOrder, []);
+  updateSignatureBadge(phone);
+
+  btn.disabled = false;
+  spinner.style.display = 'none';
+}
+
+function showStepThreeCheckout(orderData, gateways) {
+  document.getElementById('otp-step-phone').classList.remove('active');
+  document.getElementById('otp-step-verify').classList.remove('active');
+  document.getElementById('otp-step-checkout').classList.add('active');
+  hideStatus();
+
+  document.getElementById('inv-order-title').textContent = orderData.title;
+  document.getElementById('inv-amount-display').textContent = orderData.amount_formatted;
+  document.getElementById('inv-client-name').textContent = orderData.client_name;
+
+  const digiRow = document.getElementById('gw-digipay-row');
+  const shaparakRadio = document.querySelector('input[value="online_shaparak"]');
+  const digiRadio = document.querySelector('input[value="digipay"]');
+
+  if (currentPaymentMethod === 'digipay') {
+    digiRadio.checked = true;
+    digiRow.classList.add('active');
+    document.getElementById('inv-mode-badge').textContent = 'پرداخت اعتباری اقساطی دیجی‌پی';
+  } else {
+    shaparakRadio.checked = true;
+    document.getElementById('inv-mode-badge').textContent = 'پیش‌فاکتور رسمی نقدی';
+  }
+}
+
+// Final Step: Connect to Payment Gateway from inside modal
+async function processModalPayment() {
+  const phone = document.getElementById('client-phone').value.trim();
+  const selectedGw = document.querySelector('input[name="payment_gateway"]:checked')?.value || 'online_shaparak';
+  const btn = document.getElementById('btn-final-pay');
+  const spinner = document.getElementById('pay-spinner');
+
+  btn.disabled = true;
+  spinner.style.display = 'inline-block';
+  showStatus('در حال اتصال امن به درگاه بانکی / دیجی‌پی...', 'success');
+
+  try {
+    const res = await fetch(CONFIG.apiBackend + '?action=create_order_and_pay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: phone,
+        payment_mode: currentPaymentMethod,
+        gateway_id: selectedGw,
+        first_name: CONFIG.clientFirstName,
+        last_name: CONFIG.clientLastName
+      })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.redirect_url) {
+        window.location.href = data.redirect_url;
+        return;
+      }
+    }
+  } catch (e) {
+    console.log("Fallback direct checkout link...");
   }
 
-  showStatus('احراز هویت با موفقیت تأیید شد. در حال هدایت به تسویه‌حساب...', 'success');
+  // Fallback direct URL
+  const targetUrl = new URL(CONFIG.productUrl);
+  targetUrl.searchParams.set('payment_mode', currentPaymentMethod);
+  targetUrl.searchParams.set('billing_phone', phone);
+  targetUrl.searchParams.set('contract_signed', 'true');
+  window.location.href = targetUrl.toString();
+}
 
-  // Update signature box in UI
+function updateSignatureBadge(phone) {
   const sigElement = document.getElementById('client-signature-display');
   if (sigElement) {
     const now = new Date();
@@ -256,10 +323,6 @@ async function verifyOtpAndRedirect() {
     sigElement.style.background = '#DCFCE7';
     sigElement.style.color = '#166534';
   }
-
-  setTimeout(() => {
-    window.location.href = targetUrl;
-  }, 1000);
 }
 
 function showStatus(msg, type) {

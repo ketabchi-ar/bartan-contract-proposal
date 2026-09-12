@@ -669,19 +669,60 @@
       <!-- Step 2: Verification Code -->
       <div id="otp-step-verify" class="otp-step">
         <div class="input-group">
-          <label for="otp-code">کد ۶ رقمی دریافت شده را وارد کنید:</label>
+          <label for="otp-code">کد ۶ رقمی پیامک‌شده را وارد نمایید:</label>
           <input type="text" id="otp-code" placeholder="—— —— ——" maxlength="6" dir="ltr" class="code-input">
           <div class="timer-wrap">
-            <span id="otp-timer">ارسال مجدد تا ۰۱:۵۹</span>
+            <span id="otp-timer">امکان ارسال مجدد تا ۰۱:۵۹</span>
           </div>
         </div>
 
-        <button class="btn-modal-action" id="btn-verify-otp" onclick="verifyOtpAndRedirect()">
-          <span>تأیید و هدایت به درگاه پرداخت پالت</span>
+        <button class="btn-modal-action" id="btn-verify-otp" onclick="verifyOtpAndProceed()">
+          <span>تأیید کد و ورود به پرداخت</span>
           <div class="spinner" id="verify-spinner"></div>
         </button>
 
         <button class="btn-text-link" onclick="backToPhoneStep()">ویرایش شماره یا ارسال مجدد</button>
+      </div>
+
+      <!-- Step 3: In-Modal Checkout & Gateways -->
+      <div id="otp-step-checkout" class="otp-step">
+        <div class="invoice-summary-card">
+          <div class="inv-header">
+            <span class="inv-badge" id="inv-mode-badge">پیش‌فاکتور رسمی پالت</span>
+            <span class="inv-client" id="inv-client-name">سرکار خانم ملیح کرمی‌طلب</span>
+          </div>
+          <h4 id="inv-order-title" class="inv-title">پیش‌پرداخت ۵۰٪ قرارداد طراحی وب‌سایت برتن</h4>
+          <div class="inv-price-row">
+            <span>مبلغ قابل پرداخت:</span>
+            <strong id="inv-amount-display" class="inv-price">۱۵,۰۰۰,۰۰۰ تومان</strong>
+          </div>
+        </div>
+
+        <div class="gateway-selection-wrap">
+          <label class="gw-label">انتخاب روش / درگاه پرداخت:</label>
+          <div class="gw-options-list" id="gw-options-container">
+            <!-- Dynamic gateways or default choices -->
+            <label class="gw-card active">
+              <input type="radio" name="payment_gateway" value="online_shaparak" checked>
+              <div class="gw-card-content">
+                <strong>درگاه آنلاین شتاب / شاپرک (کلیه کارت‌های عضو شتاب)</strong>
+                <span>پرداخت مستقیم و آنی از طریق کلیه کارت‌های بانکی</span>
+              </div>
+            </label>
+            <label class="gw-card" id="gw-digipay-row">
+              <input type="radio" name="payment_gateway" value="digipay">
+              <div class="gw-card-content">
+                <strong>درگاه پرداخت اقساطی دیجی‌پی (DigiPay BNPL)</strong>
+                <span>تسویه در ۴ قسط ماهانه بدون پیش‌پرداخت</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <button class="btn-modal-action btn-pay-action" id="btn-final-pay" onclick="processModalPayment()">
+          <span>اتصال امن به درگاه و نهایی‌سازی</span>
+          <div class="spinner" id="pay-spinner"></div>
+        </button>
       </div>
 
       <div id="otp-status-msg" class="otp-status-msg"></div>

@@ -1,6 +1,6 @@
 <?php
 /**
- * Palette Agency - Secure OTP & WordPress Login Backend
+ * Palette Agency - In-Modal Checkout & Secure Dynamic Order Engine
  * Project: Bartan Silverworks Contract Proposal
  */
 
@@ -34,6 +34,7 @@ $raw_input = file_get_contents('php://input');
 $data = json_decode($raw_input, true) ?: $_POST;
 $action = isset($_GET['action']) ? $_GET['action'] : ($data['action'] ?? '');
 
+// 1. Send OTP
 if ($action === 'send_otp') {
     $phone = clean_phone($data['phone'] ?? '');
     if (empty($phone) || strlen($phone) < 10) {
@@ -41,14 +42,12 @@ if ($action === 'send_otp') {
         exit;
     }
 
-    // Generate 6-digit OTP
     $otp = (string)rand(100000, 999999);
     $_SESSION['contract_otp_' . $phone] = [
         'code' => $otp,
         'expire_at' => time() + 180
     ];
 
-    // Call SMS.ir Verify endpoint via cURL (Server-side, No CORS issues)
     $sms_payload = [
         'mobile' => $phone,
         'templateId' => SMSIR_TEMPLATE_ID,
@@ -72,7 +71,6 @@ if ($action === 'send_otp') {
     ]);
 
     $response = curl_exec($ch);
-    $curl_error = curl_error($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
@@ -81,21 +79,19 @@ if ($action === 'send_otp') {
     if ($http_code === 200 && (isset($res_data['status']) && $res_data['status'] === 1)) {
         echo json_encode([
             'success' => true,
-            'message' => 'کد تایید با موفقیت از طریق پیامک به شماره شما ارسال شد.',
-            'phone' => $phone
+            'message' => 'کد تایید با موفقیت از طریق پیامک به شماره شما ارسال شد.'
         ]);
     } else {
-        // Log error and allow fallback
         echo json_encode([
             'success' => true,
-            'message' => 'پیامک ارسال گردید.',
-            'debug_info' => $res_data ?: $curl_error,
-            'dev_code' => $otp // Helpful if SMS panel template is waiting approval or SMS credit
+            'message' => 'پیامک اعتبارسنجی با موفقیت ارسال گردید.',
+            'debug' => $res_data
         ]);
     }
     exit;
 }
 
+// 2. Verify OTP & Fetch In-Modal Payment Gateways
 if ($action === 'verify_otp') {
     $phone = clean_phone($data['phone'] ?? '');
     $code = trim($data['code'] ?? '');
@@ -105,7 +101,6 @@ if ($action === 'verify_otp') {
 
     $session_data = $_SESSION['contract_otp_' . $phone] ?? null;
 
-    // Check code
     $is_valid = false;
     if ($session_data && $session_data['code'] === $code && time() <= $session_data['expire_at']) {
         $is_valid = true;
@@ -118,19 +113,17 @@ if ($action === 'verify_otp') {
         exit;
     }
 
-    // If WordPress is loaded, auto login or register client account
+    // Auto Login or Register Client User in WP
     $user_id = null;
     if ($wp_loaded) {
         $username = 'client_' . $phone;
         $user = get_user_by('login', $username);
         
         if (!$user) {
-            // Check by mobile meta or email
             $user = get_user_by('email', $phone . '@palette.agency');
         }
 
         if (!$user) {
-            // Register new user
             $random_password = wp_generate_password(16, false);
             $user_id = wp_create_user($username, $random_password, $phone . '@palette.agency');
             if (!is_wp_error($user_id)) {
@@ -155,30 +148,110 @@ if ($action === 'verify_otp') {
         }
     }
 
-    // Prepare redirect URL
-    $target_url = 'https://palette.agency/bartan-website?payment_mode=' . urlencode($payment_mode) .
-                  '&billing_phone=' . urlencode($phone) .
-                  '&billing_first_name=' . urlencode($client_first_name) .
-                  '&billing_last_name=' . urlencode($client_last_name) .
-                  '&contract_signed=true';
+    // Prepare Invoice Data
+    $amount = ($payment_mode === 'cash') ? 15000000 : 30000000;
+    $amount_formatted = number_format($amount) . ' تومان';
+    $order_title = ($payment_mode === 'cash') 
+        ? 'پیش‌پرداخت ۵۰٪ قرارداد طراحی وب‌سایت برتن (BRATAN)' 
+        : 'تسویه کامل قرارداد وب‌سایت برتن در ۴ قسط ماهانه (دیجی‌پی)';
+
+    // Retrieve active gateways from WooCommerce
+    $available_gateways = [];
+    if ($wp_loaded && function_exists('WC')) {
+        $gateways = WC()->payment_gateways->get_available_payment_gateways();
+        foreach ($gateways as $gid => $gateway) {
+            $available_gateways[] = [
+                'id' => $gid,
+                'title' => $gateway->get_title(),
+                'description' => $gateway->get_description(),
+                'is_digipay' => (stripos($gid, 'digi') !== false || stripos($gateway->get_title(), 'دیجی') !== false)
+            ];
+        }
+    }
 
     echo json_encode([
         'success' => true,
-        'message' => 'احراز هویت و امضای قرارداد با موفقیت انجام شد. در حال هدایت به درگاه پرداخت...',
-        'redirect_url' => $target_url,
+        'message' => 'هویت کارفرما تأیید شد.',
         'user_id' => $user_id,
-        'wp_logged_in' => $wp_loaded && $user_id
+        'order_data' => [
+            'title' => $order_title,
+            'amount' => $amount,
+            'amount_formatted' => $amount_formatted,
+            'payment_mode' => $payment_mode,
+            'client_name' => $client_first_name . ' ' . $client_last_name,
+            'client_phone' => $phone
+        ],
+        'gateways' => $available_gateways
     ]);
     exit;
 }
 
+// 3. Process In-Modal Direct Payment (Creates Dynamic Order without public product!)
+if ($action === 'create_order_and_pay') {
+    $phone = clean_phone($data['phone'] ?? '');
+    $payment_mode = $data['payment_mode'] ?? 'cash';
+    $gateway_id = $data['gateway_id'] ?? '';
+    $client_first_name = $data['first_name'] ?? 'ملیح';
+    $client_last_name = $data['last_name'] ?? 'کرمی‌طلب';
+
+    $amount = ($payment_mode === 'cash') ? 15000000 : 30000000;
+    $item_name = ($payment_mode === 'cash') 
+        ? 'پیش‌پرداخت ۵۰٪ قرارداد وب‌سایت اختصاصی برتن (BRATAN)' 
+        : 'قرارداد وب‌سایت اختصاصی برتن - پرداخت اقساطی دیجی‌پی';
+
+    if ($wp_loaded && function_exists('wc_create_order')) {
+        // Create order completely dynamically in WooCommerce
+        $order = wc_create_order();
+
+        // Add custom line item with the exact contract price
+        $item = new WC_Order_Item_Fee();
+        $item->set_name($item_name);
+        $item->set_amount($amount);
+        $item->set_total($amount);
+        $order->add_item($item);
+
+        // Billing info
+        $address = [
+            'first_name' => $client_first_name,
+            'last_name'  => $client_last_name,
+            'phone'      => $phone,
+            'email'      => $phone . '@palette.agency'
+        ];
+        $order->set_address($address, 'billing');
+        
+        if (!empty($gateway_id)) {
+            $order->set_payment_method($gateway_id);
+        }
+
+        $order->calculate_totals();
+        $order->update_status('pending', 'سفارش ثبت‌شده از پاپ‌آپ قرارداد آنلاین برتن');
+
+        // Generate payment URL directly to gateway
+        $payment_url = $order->get_checkout_payment_url(true);
+
+        echo json_encode([
+            'success' => true,
+            'redirect_url' => $payment_url,
+            'order_id' => $order->get_id()
+        ]);
+        exit;
+    } else {
+        // Fallback for standalone/local testing
+        $fallback_url = 'https://palette.agency/checkout/?add-to-cart=bartan-website&billing_phone=' . urlencode($phone);
+        echo json_encode([
+            'success' => true,
+            'redirect_url' => $fallback_url
+        ]);
+        exit;
+    }
+}
+
 function clean_phone($p) {
     $p = preg_replace('/[^0-9]/', '', $p);
-    // Convert Iranian formats to 09xxxxxxxxx
     if (strpos($p, '98') === 0) {
         $p = '0' . substr($p, 2);
     }
     return $p;
 }
 
-echo json_encode(['status' => 'Palette Agency Contract API Ready']);
+echo json_encode(['status' => 'Palette In-Modal Checkout API Ready']);

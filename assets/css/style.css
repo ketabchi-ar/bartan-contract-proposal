@@ -1288,6 +1288,124 @@ body {
   margin-top: 4px;
 }
 
+/* Step 3: In-Modal Invoice & Gateways */
+.invoice-summary-card {
+  background: #F9F8F5;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  text-align: right;
+  margin-bottom: 16px;
+}
+
+.inv-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.inv-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--primary-dark);
+  color: #FFF;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.inv-client {
+  font-size: 0.8rem;
+  color: var(--secondary-taupe);
+  font-weight: 600;
+}
+
+.inv-title {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--primary-dark);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.inv-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px dashed #DDD9D0;
+  padding-top: 8px;
+  font-size: 0.86rem;
+}
+
+.inv-price {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #1F8A70;
+}
+
+.gateway-selection-wrap {
+  text-align: right;
+  margin-bottom: 20px;
+}
+
+.gw-label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--primary-dark);
+  margin-bottom: 8px;
+}
+
+.gw-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gw-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  background: #FFF;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.gw-card:hover {
+  border-color: #BBB;
+}
+
+.gw-card.active, .gw-card:has(input:checked) {
+  border-color: var(--primary-dark);
+  background: #FAF8F5;
+}
+
+.gw-card input {
+  margin-top: 4px;
+}
+
+.gw-card-content strong {
+  display: block;
+  font-size: 0.86rem;
+  color: var(--primary-dark);
+}
+
+.gw-card-content span {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.btn-pay-action {
+  background: #1F8A70 !important;
+}
+
+.btn-pay-action:hover {
+  background: #176B57 !important;
+}
+
 .spinner {
   display: none;
   width: 18px;
