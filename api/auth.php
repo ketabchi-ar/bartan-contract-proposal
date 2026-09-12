@@ -200,8 +200,22 @@ if ($action === 'create_order_and_pay') {
         : 'قرارداد وب‌سایت اختصاصی برتن - پرداخت اقساطی دیجی‌پی';
 
     if ($wp_loaded && function_exists('wc_create_order')) {
+        // Find or verify client WP User ID
+        $username = 'client_' . $phone;
+        $user = get_user_by('login', $username);
+        if (!$user) {
+            $user = get_user_by('email', $phone . '@palette.agency');
+        }
+        $customer_id = $user ? $user->ID : get_current_user_id();
+
         // Create order completely dynamically in WooCommerce
-        $order = wc_create_order();
+        $order = wc_create_order([
+            'customer_id' => $customer_id
+        ]);
+
+        if ($customer_id) {
+            $order->set_customer_id($customer_id);
+        }
 
         // Add custom line item with the exact contract price
         $item = new WC_Order_Item_Fee();
