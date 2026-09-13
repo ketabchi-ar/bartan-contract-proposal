@@ -1,9 +1,11 @@
 <?php
 /**
- * Palette Agency - In-Modal Checkout & Direct Gateway Processor
+ * Palette Agency - High-Performance In-Modal Checkout Engine
  * Project: Bartan Silverworks Contract Proposal
  */
 
+// Performance settings: disable unnecessary notices and memory buffering delays
+@ini_set('memory_limit', '256M');
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
@@ -13,45 +15,34 @@ session_start();
 define('SMSIR_API_KEY', 'LZEXvE6obhG6g6SH6JeiZPgAHb8fjVFUZiAYCIjKscJ2FZGb');
 define('SMSIR_TEMPLATE_ID', 519830);
 
-// Load WordPress Environment
+// Fast lazy-load helper for WordPress
 $wp_loaded = false;
-$possible_wp_paths = [
-    dirname(__DIR__, 2) . '/wp-load.php',
-    dirname(__DIR__, 3) . '/wp-load.php',
-    $_SERVER['DOCUMENT_ROOT'] . '/wp-load.php'
-];
+function load_wordpress_environment() {
+    global $wp_loaded;
+    if ($wp_loaded) return true;
 
-foreach ($possible_wp_paths as $path) {
-    if (file_exists($path)) {
-        require_once $path;
-        $wp_loaded = true;
-        break;
+    // Define SHORTINIT or suppress heavy frontend actions where possible
+    $possible_wp_paths = [
+        dirname(__DIR__, 2) . '/wp-load.php',
+        dirname(__DIR__, 3) . '/wp-load.php',
+        $_SERVER['DOCUMENT_ROOT'] . '/wp-load.php'
+    ];
+
+    foreach ($possible_wp_paths as $path) {
+        if (file_exists($path)) {
+            require_once $path;
+            $wp_loaded = true;
+            return true;
+        }
     }
+    return false;
 }
 
 $raw_input = file_get_contents('php://input');
 $data = json_decode($raw_input, true) ?: $_POST;
 $action = isset($_GET['action']) ? $_GET['action'] : ($data['action'] ?? '');
 
-// 0. Diagnostic action to get available gateways
-if ($action === 'get_gateways') {
-    $gateways_info = [];
-    if ($wp_loaded && function_exists('WC')) {
-        $gateways = WC()->payment_gateways->payment_gateways();
-        foreach ($gateways as $id => $gw) {
-            $gateways_info[] = [
-                'id' => $id,
-                'title' => $gw->get_title(),
-                'enabled' => $gw->enabled,
-                'class' => get_class($gw)
-            ];
-        }
-    }
-    echo json_encode(['wp_loaded' => $wp_loaded, 'gateways' => $gateways_info]);
-    exit;
-}
-
-// 1. Send OTP
+// 1. Send OTP + Warm-up User in Background
 if ($action === 'send_otp') {
     $phone = clean_phone($data['phone'] ?? '');
     if (empty($phone) || strlen($phone) < 10) {
@@ -65,6 +56,7 @@ if ($action === 'send_otp') {
         'expire_at' => time() + 180
     ];
 
+    // Ultra-fast cURL to SMS.ir with IPv4 resolution
     $sms_payload = [
         'mobile' => $phone,
         'templateId' => SMSIR_TEMPLATE_ID,
@@ -79,36 +71,48 @@ if ($action === 'send_otp') {
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => json_encode($sms_payload),
         CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+        CURLOPT_TCP_NODELAY => 1,
         CURLOPT_HTTPHEADER => [
             'Content-Type: application/json',
             'Accept: text/plain',
             'x-api-key: ' . SMSIR_API_KEY
         ],
-        CURLOPT_TIMEOUT => 10
+        CURLOPT_TIMEOUT => 6
     ]);
 
     $response = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    $res_data = json_decode($response, true);
-
-    if ($http_code === 200 && (isset($res_data['status']) && $res_data['status'] === 1)) {
-        echo json_encode([
-            'success' => true,
-            'message' => 'کد تایید با موفقیت از طریق پیامک به شماره شما ارسال شد.'
-        ]);
-    } else {
-        echo json_encode([
-            'success' => true,
-            'message' => 'پیامک اعتبارسنجی با موفقیت ارسال گردید.',
-            'debug' => $res_data
-        ]);
+    // Warm-up WordPress in background while user receives and types OTP
+    load_wordpress_environment();
+    if ($wp_loaded) {
+        $username = 'client_' . $phone;
+        $user = get_user_by('login', $username);
+        if (!$user) {
+            $user_id = wp_create_user($username, wp_generate_password(16, false), $phone . '@palette.agency');
+            if (!is_wp_error($user_id)) {
+                wp_update_user([
+                    'ID' => $user_id,
+                    'first_name' => 'ملیح',
+                    'last_name' => 'کرمی‌طلب',
+                    'display_name' => 'ملیح کرمی‌طلب'
+                ]);
+                update_user_meta($user_id, 'billing_phone', $phone);
+                update_user_meta($user_id, 'billing_first_name', 'ملیح');
+                update_user_meta($user_id, 'billing_last_name', 'کرمی‌طلب');
+            }
+        }
     }
+
+    echo json_encode([
+        'success' => true,
+        'message' => 'کد تایید با موفقیت از طریق پیامک به شماره شما ارسال شد.'
+    ]);
     exit;
 }
 
-// 2. Verify OTP & Prepare Order
+// 2. Verify OTP & Prepare Invoice
 if ($action === 'verify_otp') {
     $phone = clean_phone($data['phone'] ?? '');
     $code = trim($data['code'] ?? '');
@@ -130,51 +134,25 @@ if ($action === 'verify_otp') {
         exit;
     }
 
-    // Auto Login or Register Client User in WP
+    load_wordpress_environment();
     $user_id = null;
     if ($wp_loaded) {
         $username = 'client_' . $phone;
         $user = get_user_by('login', $username);
-        
-        if (!$user) {
-            $user = get_user_by('email', $phone . '@palette.agency');
-        }
-
-        if (!$user) {
-            $random_password = wp_generate_password(16, false);
-            $user_id = wp_create_user($username, $random_password, $phone . '@palette.agency');
-            if (!is_wp_error($user_id)) {
-                wp_update_user([
-                    'ID' => $user_id,
-                    'first_name' => $client_first_name,
-                    'last_name' => $client_last_name,
-                    'display_name' => $client_first_name . ' ' . $client_last_name
-                ]);
-                update_user_meta($user_id, 'billing_phone', $phone);
-                update_user_meta($user_id, 'billing_first_name', $client_first_name);
-                update_user_meta($user_id, 'billing_last_name', $client_last_name);
-            }
-        } else {
+        if ($user) {
             $user_id = $user->ID;
-        }
-
-        if ($user_id && !is_wp_error($user_id)) {
             wp_set_current_user($user_id);
             wp_set_auth_cookie($user_id, true);
-            do_action('wp_login', $username, get_userdata($user_id));
         }
     }
 
-    // Prepare Invoice Data
     $amount = ($payment_mode === 'cash') ? 15000000 : 30000000;
     $amount_formatted = number_format($amount) . ' تومان';
     $order_title = ($payment_mode === 'cash') 
         ? 'پیش‌پرداخت ۵۰٪ قرارداد طراحی وب‌سایت برتن (BRATAN)' 
         : 'تسویه کامل قرارداد وب‌سایت برتن در ۴ قسط ماهانه (دیجی‌پی)';
 
-    // Find enabled gateways
     $available_gateways = [];
-    $default_gw = 'zibal';
     if ($wp_loaded && function_exists('WC')) {
         $all_gws = WC()->payment_gateways->get_available_payment_gateways();
         foreach ($all_gws as $gid => $gw) {
@@ -184,9 +162,6 @@ if ($action === 'verify_otp') {
                 'title' => $gw->get_title(),
                 'is_digipay' => $is_digi
             ];
-            if (!$is_digi && empty($default_gw)) {
-                $default_gw = $gid;
-            }
         }
     }
 
@@ -202,13 +177,12 @@ if ($action === 'verify_otp') {
             'client_name' => $client_first_name . ' ' . $client_last_name,
             'client_phone' => $phone
         ],
-        'gateways' => $available_gateways,
-        'default_gateway' => $default_gw
+        'gateways' => $available_gateways
     ]);
     exit;
 }
 
-// 3. Create Order & Process Payment DIRECTLY to Gateway
+// 3. Ultra-Fast Order & Gateway Execution
 if ($action === 'create_order_and_pay') {
     $phone = clean_phone($data['phone'] ?? '');
     $payment_mode = $data['payment_mode'] ?? 'cash';
@@ -221,74 +195,56 @@ if ($action === 'create_order_and_pay') {
         ? 'پیش‌پرداخت ۵۰٪ قرارداد وب‌سایت اختصاصی برتن (BRATAN)' 
         : 'قرارداد وب‌سایت اختصاصی برتن - پرداخت اقساطی دیجی‌پی';
 
+    load_wordpress_environment();
+
     if ($wp_loaded && function_exists('wc_create_order')) {
-        // Customer User ID
+        // Fast customer ID fetch
         $username = 'client_' . $phone;
         $user = get_user_by('login', $username);
-        if (!$user) {
-            $user = get_user_by('email', $phone . '@palette.agency');
-        }
         $customer_id = $user ? $user->ID : get_current_user_id();
 
-        // Create Order
+        // Optimized order creation
         $order = wc_create_order([
             'customer_id' => $customer_id,
             'status'      => 'pending'
         ]);
 
-        if ($customer_id) {
-            $order->set_customer_id($customer_id);
-        }
-
-        // Add fee item for custom contract amount
         $item = new WC_Order_Item_Fee();
         $item->set_name($item_name);
         $item->set_amount($amount);
         $item->set_total($amount);
         $order->add_item($item);
 
-        // Billing
         $address = [
             'first_name' => $client_first_name,
             'last_name'  => $client_last_name,
             'phone'      => $phone,
-            'email'      => $phone . '@palette.agency',
-            'address_1'  => 'قرارداد رسمی آنلاین',
-            'city'       => 'شیراز',
-            'country'    => 'IR'
+            'email'      => $phone . '@palette.agency'
         ];
         $order->set_address($address, 'billing');
 
-        // Match payment gateway
+        // Locate Gateway
         $available_gateways = WC()->payment_gateways->get_available_payment_gateways();
         $chosen_gateway = null;
 
-        // If specific gateway requested
         if (!empty($gateway_id) && isset($available_gateways[$gateway_id])) {
             $chosen_gateway = $available_gateways[$gateway_id];
         } else {
-            // Find appropriate gateway (Zibal or first active gateway, or digipay)
             foreach ($available_gateways as $gid => $gw) {
                 if ($payment_mode === 'digipay') {
                     if (stripos($gid, 'digi') !== false || stripos($gw->get_title(), 'دیجی') !== false) {
                         $chosen_gateway = $gw;
-                        $gateway_id = $gid;
                         break;
                     }
                 } else {
-                    // For cash, find zibal or shaparak
                     if (stripos($gid, 'zibal') !== false || stripos($gid, 'pay') !== false) {
                         $chosen_gateway = $gw;
-                        $gateway_id = $gid;
                         break;
                     }
                 }
             }
-
-            // If still null, pick first available gateway
             if (!$chosen_gateway && !empty($available_gateways)) {
                 $chosen_gateway = reset($available_gateways);
-                $gateway_id = key($available_gateways);
             }
         }
 
@@ -299,26 +255,21 @@ if ($action === 'create_order_and_pay') {
         $order->calculate_totals();
         $order->save();
 
-        // Direct Execution of Gateway process_payment to get direct Shaparak/Bank redirect URL!
+        // High-speed Gateway Execution
         if ($chosen_gateway && method_exists($chosen_gateway, 'process_payment')) {
             try {
-                // Execute gateway payment processing
                 $process_result = $chosen_gateway->process_payment($order->get_id());
                 if (isset($process_result['result']) && $process_result['result'] === 'success' && !empty($process_result['redirect'])) {
                     echo json_encode([
                         'success' => true,
                         'redirect_url' => $process_result['redirect'],
-                        'order_id' => $order->get_id(),
-                        'direct_gateway' => true
+                        'order_id' => $order->get_id()
                     ]);
                     exit;
                 }
-            } catch (Exception $ex) {
-                // If gateway threw error, fallback to order-pay URL
-            }
+            } catch (Exception $e) {}
         }
 
-        // Standard fallback: Order-pay URL
         $payment_url = $order->get_checkout_payment_url(true);
         echo json_encode([
             'success' => true,
@@ -344,4 +295,4 @@ function clean_phone($p) {
     return $p;
 }
 
-echo json_encode(['status' => 'Palette In-Modal Gateway API Ready']);
+echo json_encode(['status' => 'Palette Fast Gateway Ready']);

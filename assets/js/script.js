@@ -296,7 +296,7 @@ function showStepThreeCheckout(orderData, gateways) {
   }
 }
 
-// Final Step: Connect to Payment Gateway from inside modal
+// Final Step: Connect to Payment Gateway with Smart Step-by-step Feedback
 async function processModalPayment() {
   const phone = document.getElementById('client-phone').value.trim();
   const selectedGw = document.querySelector('input[name="payment_gateway"]:checked')?.value || 'online_shaparak';
@@ -305,7 +305,14 @@ async function processModalPayment() {
 
   btn.disabled = true;
   spinner.style.display = 'inline-block';
-  showStatus('در حال اتصال امن به درگاه بانکی / دیجی‌پی...', 'success');
+  
+  // Step 1 Feedback
+  showStatus('۱/۳ در حال ثبت شناسه فاکتور اختصاصی...', 'success');
+
+  // Animated feedback transitions
+  const statusTimer = setTimeout(() => {
+    showStatus('۲/۳ اتصال ایمن به سامانه پرداخت شاپرک / دیجی‌پی...', 'success');
+  }, 900);
 
   try {
     const res = await fetch(CONFIG.apiBackend + '?action=create_order_and_pay', {
@@ -320,14 +327,20 @@ async function processModalPayment() {
       })
     });
 
+    clearTimeout(statusTimer);
+
     if (res.ok) {
       const data = await res.json();
       if (data.success && data.redirect_url) {
-        window.location.href = data.redirect_url;
+        showStatus('۳/۳ هدایت به صفحه پرداخت بانکی...', 'success');
+        setTimeout(() => {
+          window.location.href = data.redirect_url;
+        }, 300);
         return;
       }
     }
   } catch (e) {
+    clearTimeout(statusTimer);
     console.log("Fallback direct checkout link...");
   }
 
