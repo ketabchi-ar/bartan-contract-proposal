@@ -1,6 +1,6 @@
 <?php
 /**
- * Palette Agency - In-Modal Checkout & Secure Dynamic Order Engine
+ * Palette Agency - In-Modal Checkout & Direct Gateway Processor
  * Project: Bartan Silverworks Contract Proposal
  */
 
@@ -10,15 +10,14 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
 session_start();
 
-// Configuration
 define('SMSIR_API_KEY', 'LZEXvE6obhG6g6SH6JeiZPgAHb8fjVFUZiAYCIjKscJ2FZGb');
 define('SMSIR_TEMPLATE_ID', 519830);
 
-// Load WordPress Environment if hosted on same server
+// Load WordPress Environment
 $wp_loaded = false;
 $possible_wp_paths = [
-    dirname(__DIR__, 2) . '/wp-load.php', // e.g. /public_html/contract/bartan/ -> /public_html/wp-load.php
-    dirname(__DIR__, 3) . '/wp-load.php', // e.g. /public_html/sub/contract/bartan/ -> /public_html/wp-load.php
+    dirname(__DIR__, 2) . '/wp-load.php',
+    dirname(__DIR__, 3) . '/wp-load.php',
     $_SERVER['DOCUMENT_ROOT'] . '/wp-load.php'
 ];
 
@@ -33,6 +32,24 @@ foreach ($possible_wp_paths as $path) {
 $raw_input = file_get_contents('php://input');
 $data = json_decode($raw_input, true) ?: $_POST;
 $action = isset($_GET['action']) ? $_GET['action'] : ($data['action'] ?? '');
+
+// 0. Diagnostic action to get available gateways
+if ($action === 'get_gateways') {
+    $gateways_info = [];
+    if ($wp_loaded && function_exists('WC')) {
+        $gateways = WC()->payment_gateways->payment_gateways();
+        foreach ($gateways as $id => $gw) {
+            $gateways_info[] = [
+                'id' => $id,
+                'title' => $gw->get_title(),
+                'enabled' => $gw->enabled,
+                'class' => get_class($gw)
+            ];
+        }
+    }
+    echo json_encode(['wp_loaded' => $wp_loaded, 'gateways' => $gateways_info]);
+    exit;
+}
 
 // 1. Send OTP
 if ($action === 'send_otp') {
@@ -91,7 +108,7 @@ if ($action === 'send_otp') {
     exit;
 }
 
-// 2. Verify OTP & Fetch In-Modal Payment Gateways
+// 2. Verify OTP & Prepare Order
 if ($action === 'verify_otp') {
     $phone = clean_phone($data['phone'] ?? '');
     $code = trim($data['code'] ?? '');
@@ -155,17 +172,21 @@ if ($action === 'verify_otp') {
         ? 'پیش‌پرداخت ۵۰٪ قرارداد طراحی وب‌سایت برتن (BRATAN)' 
         : 'تسویه کامل قرارداد وب‌سایت برتن در ۴ قسط ماهانه (دیجی‌پی)';
 
-    // Retrieve active gateways from WooCommerce
+    // Find enabled gateways
     $available_gateways = [];
+    $default_gw = 'zibal';
     if ($wp_loaded && function_exists('WC')) {
-        $gateways = WC()->payment_gateways->get_available_payment_gateways();
-        foreach ($gateways as $gid => $gateway) {
+        $all_gws = WC()->payment_gateways->get_available_payment_gateways();
+        foreach ($all_gws as $gid => $gw) {
+            $is_digi = (stripos($gid, 'digi') !== false || stripos($gw->get_title(), 'دیجی') !== false);
             $available_gateways[] = [
                 'id' => $gid,
-                'title' => $gateway->get_title(),
-                'description' => $gateway->get_description(),
-                'is_digipay' => (stripos($gid, 'digi') !== false || stripos($gateway->get_title(), 'دیجی') !== false)
+                'title' => $gw->get_title(),
+                'is_digipay' => $is_digi
             ];
+            if (!$is_digi && empty($default_gw)) {
+                $default_gw = $gid;
+            }
         }
     }
 
@@ -181,12 +202,13 @@ if ($action === 'verify_otp') {
             'client_name' => $client_first_name . ' ' . $client_last_name,
             'client_phone' => $phone
         ],
-        'gateways' => $available_gateways
+        'gateways' => $available_gateways,
+        'default_gateway' => $default_gw
     ]);
     exit;
 }
 
-// 3. Process In-Modal Direct Payment (Creates Dynamic Order without public product!)
+// 3. Create Order & Process Payment DIRECTLY to Gateway
 if ($action === 'create_order_and_pay') {
     $phone = clean_phone($data['phone'] ?? '');
     $payment_mode = $data['payment_mode'] ?? 'cash';
@@ -200,7 +222,7 @@ if ($action === 'create_order_and_pay') {
         : 'قرارداد وب‌سایت اختصاصی برتن - پرداخت اقساطی دیجی‌پی';
 
     if ($wp_loaded && function_exists('wc_create_order')) {
-        // Find or verify client WP User ID
+        // Customer User ID
         $username = 'client_' . $phone;
         $user = get_user_by('login', $username);
         if (!$user) {
@@ -208,41 +230,96 @@ if ($action === 'create_order_and_pay') {
         }
         $customer_id = $user ? $user->ID : get_current_user_id();
 
-        // Create order completely dynamically in WooCommerce
+        // Create Order
         $order = wc_create_order([
-            'customer_id' => $customer_id
+            'customer_id' => $customer_id,
+            'status'      => 'pending'
         ]);
 
         if ($customer_id) {
             $order->set_customer_id($customer_id);
         }
 
-        // Add custom line item with the exact contract price
+        // Add fee item for custom contract amount
         $item = new WC_Order_Item_Fee();
         $item->set_name($item_name);
         $item->set_amount($amount);
         $item->set_total($amount);
         $order->add_item($item);
 
-        // Billing info
+        // Billing
         $address = [
             'first_name' => $client_first_name,
             'last_name'  => $client_last_name,
             'phone'      => $phone,
-            'email'      => $phone . '@palette.agency'
+            'email'      => $phone . '@palette.agency',
+            'address_1'  => 'قرارداد رسمی آنلاین',
+            'city'       => 'شیراز',
+            'country'    => 'IR'
         ];
         $order->set_address($address, 'billing');
-        
-        if (!empty($gateway_id)) {
-            $order->set_payment_method($gateway_id);
+
+        // Match payment gateway
+        $available_gateways = WC()->payment_gateways->get_available_payment_gateways();
+        $chosen_gateway = null;
+
+        // If specific gateway requested
+        if (!empty($gateway_id) && isset($available_gateways[$gateway_id])) {
+            $chosen_gateway = $available_gateways[$gateway_id];
+        } else {
+            // Find appropriate gateway (Zibal or first active gateway, or digipay)
+            foreach ($available_gateways as $gid => $gw) {
+                if ($payment_mode === 'digipay') {
+                    if (stripos($gid, 'digi') !== false || stripos($gw->get_title(), 'دیجی') !== false) {
+                        $chosen_gateway = $gw;
+                        $gateway_id = $gid;
+                        break;
+                    }
+                } else {
+                    // For cash, find zibal or shaparak
+                    if (stripos($gid, 'zibal') !== false || stripos($gid, 'pay') !== false) {
+                        $chosen_gateway = $gw;
+                        $gateway_id = $gid;
+                        break;
+                    }
+                }
+            }
+
+            // If still null, pick first available gateway
+            if (!$chosen_gateway && !empty($available_gateways)) {
+                $chosen_gateway = reset($available_gateways);
+                $gateway_id = key($available_gateways);
+            }
+        }
+
+        if ($chosen_gateway) {
+            $order->set_payment_method($chosen_gateway);
         }
 
         $order->calculate_totals();
-        $order->update_status('pending', 'سفارش ثبت‌شده از پاپ‌آپ قرارداد آنلاین برتن');
+        $order->save();
 
-        // Generate payment URL directly to gateway
+        // Direct Execution of Gateway process_payment to get direct Shaparak/Bank redirect URL!
+        if ($chosen_gateway && method_exists($chosen_gateway, 'process_payment')) {
+            try {
+                // Execute gateway payment processing
+                $process_result = $chosen_gateway->process_payment($order->get_id());
+                if (isset($process_result['result']) && $process_result['result'] === 'success' && !empty($process_result['redirect'])) {
+                    echo json_encode([
+                        'success' => true,
+                        'redirect_url' => $process_result['redirect'],
+                        'order_id' => $order->get_id(),
+                        'direct_gateway' => true
+                    ]);
+                    exit;
+                }
+            } catch (Exception $ex) {
+                // If gateway threw error, fallback to order-pay URL
+            }
+        }
+
+        // Standard fallback: Order-pay URL
         $payment_url = $order->get_checkout_payment_url(true);
-
         echo json_encode([
             'success' => true,
             'redirect_url' => $payment_url,
@@ -250,8 +327,7 @@ if ($action === 'create_order_and_pay') {
         ]);
         exit;
     } else {
-        // Fallback for standalone/local testing
-        $fallback_url = 'https://palette.agency/checkout/?add-to-cart=bartan-website&billing_phone=' . urlencode($phone);
+        $fallback_url = 'https://palette.agency/checkout/?billing_phone=' . urlencode($phone);
         echo json_encode([
             'success' => true,
             'redirect_url' => $fallback_url
@@ -268,4 +344,4 @@ function clean_phone($p) {
     return $p;
 }
 
-echo json_encode(['status' => 'Palette In-Modal Checkout API Ready']);
+echo json_encode(['status' => 'Palette In-Modal Gateway API Ready']);

@@ -256,17 +256,43 @@ function showStepThreeCheckout(orderData, gateways) {
   document.getElementById('inv-amount-display').textContent = orderData.amount_formatted;
   document.getElementById('inv-client-name').textContent = orderData.client_name;
 
-  const digiRow = document.getElementById('gw-digipay-row');
-  const shaparakRadio = document.querySelector('input[value="online_shaparak"]');
-  const digiRadio = document.querySelector('input[value="digipay"]');
+  const gwContainer = document.getElementById('gw-options-container');
 
-  if (currentPaymentMethod === 'digipay') {
-    digiRadio.checked = true;
-    digiRow.classList.add('active');
-    document.getElementById('inv-mode-badge').textContent = 'پرداخت اعتباری اقساطی دیجی‌پی';
+  // If server returned active WooCommerce gateways, render them dynamically!
+  if (gateways && gateways.length > 0) {
+    gwContainer.innerHTML = '';
+    gateways.forEach((gw, index) => {
+      const isSelected = (currentPaymentMethod === 'digipay' && gw.is_digipay) || 
+                         (currentPaymentMethod === 'cash' && !gw.is_digipay && index === 0);
+      const card = document.createElement('label');
+      card.className = `gw-card ${isSelected ? 'active' : ''}`;
+      card.innerHTML = `
+        <input type="radio" name="payment_gateway" value="${gw.id}" ${isSelected ? 'checked' : ''}>
+        <div class="gw-card-content">
+          <strong>${gw.title}</strong>
+          <span>${gw.is_digipay ? 'پرداخت اقساطی ۴ ماهه دیجی‌پی' : 'اتصال مستقیم به درگاه بانکی شاپرک (زیبال)'}</span>
+        </div>
+      `;
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.gw-card').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+      });
+      gwContainer.appendChild(card);
+    });
   } else {
-    shaparakRadio.checked = true;
-    document.getElementById('inv-mode-badge').textContent = 'پیش‌فاکتور رسمی نقدی';
+    // Default fallback
+    const digiRow = document.getElementById('gw-digipay-row');
+    const shaparakRadio = document.querySelector('input[value="online_shaparak"]');
+    const digiRadio = document.querySelector('input[value="digipay"]');
+
+    if (currentPaymentMethod === 'digipay') {
+      if (digiRadio) digiRadio.checked = true;
+      if (digiRow) digiRow.classList.add('active');
+      document.getElementById('inv-mode-badge').textContent = 'پرداخت اعتباری اقساطی دیجی‌پی';
+    } else {
+      if (shaparakRadio) shaparakRadio.checked = true;
+      document.getElementById('inv-mode-badge').textContent = 'پیش‌فاکتور رسمی نقدی';
+    }
   }
 }
 
