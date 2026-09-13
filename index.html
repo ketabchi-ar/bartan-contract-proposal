@@ -12,6 +12,15 @@
 </head>
 <body>
 
+  <!-- Test Mode Bar for Instant Simulation on GitHub & Local -->
+  <div class="test-mode-bar no-print">
+    <span>🛠️ <strong>نوار ابزار تست و شبیه‌سازی زنده:</strong></span>
+    <button class="test-btn" onclick="simulateSuccessPayment('zibal')">⚡ تست پرداخت موفق با زیبال (شتاب/شاپرک)</button>
+    <button class="test-btn" onclick="simulateSuccessPayment('digipay')">💳 تست پرداخت موفق با دیجی‌پی (۴ قسط)</button>
+    <button class="test-btn" onclick="openTestOtpModal()">📲 تست پاپ‌آپ لاگین OTP</button>
+    <button class="test-btn test-btn-reset" onclick="resetToInitialState()">🔄 بازنشانی به حالت اولیه</button>
+  </div>
+
   <!-- Top Bar / Navigation -->
   <header class="top-nav no-print">
     <div class="nav-container">
@@ -38,6 +47,32 @@
 
   <!-- Hero Header -->
   <div class="contract-wrapper">
+
+    <!-- Signed Contract Verification Banner (Shown after successful payment) -->
+    <div id="signed-success-banner" class="signed-success-banner no-print">
+      <div class="ssb-content">
+        <div class="ssb-text">
+          <h3>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            قرارداد رسمی با موفقیت منعقد گردید و پیش‌پرداخت تایید شد!
+          </h3>
+          <p>کارفرمای گرامی (سرکار خانم ملیح کرمی‌طلب)، هویت الکترونیک شما با پیامک OTP تایید و تراکنش مالی با موفقیت ثبت گردید.</p>
+          <div class="ssb-meta-tags">
+            <span class="meta-pill" id="meta-ref-tag">کد پیگیری شاپرک: <strong>۱۴۰۵۹۸۲۳۴۱</strong></span>
+            <span class="meta-pill" id="meta-order-tag">شماره سفارش: <strong>۱۲۸۶۵#</strong></span>
+            <span class="meta-pill" id="meta-date-tag">تاریخ و ساعت انعقاد: <strong>امروز</strong></span>
+            <span class="meta-pill" id="meta-gw-tag">شیوه تسویه: <strong>درگاه آنلاین زیبال (شاپرک)</strong></span>
+          </div>
+        </div>
+        <div class="ssb-action">
+          <button class="btn-download-pdf-hero" onclick="window.print()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            دانلود نسخه نهایی قرارداد (PDF)
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="official-header">
       <div class="header-top-row">
         <div class="agency-meta">
@@ -559,7 +594,7 @@
 
       <!-- Interactive Signing & Payment Section -->
       <section class="signing-container" id="signing-section">
-        <div class="signing-card">
+        <div class="signing-card" id="signing-card-default">
           <div class="signing-header">
             <div class="sign-icon">✍️</div>
             <h3>تأیید رسمی و ورود به درگاه پرداخت</h3>
@@ -591,6 +626,19 @@
             <span class="badge-f">⚡ سامانه ارسال سریع SMS.ir</span>
             <span class="badge-f">🌐 ثبت مستقیم در سامانه پالت</span>
           </div>
+        </div>
+
+        <!-- Signing Completed Card (Replaces buttons when contract is paid & signed) -->
+        <div class="signing-card" id="signing-card-completed" style="display: none; background: #F0FDF4; border-color: #16A34A;">
+          <div class="signing-header" style="margin-bottom: 20px;">
+            <div class="sign-icon" style="color: #16A34A;">✅</div>
+            <h3 style="color: #166534;">این قرارداد با موفقیت تأیید و امضا گردید</h3>
+            <p style="color: #15803D;">کلیه مفاد و پیوست‌ها مورد توافق طرفین قرار گرفته و پرداخت مالی با موفقیت تایید شده است.</p>
+          </div>
+          <button type="button" class="btn-sign" style="background: #15803D; color: #FFF; margin: 0 auto; max-width: 400px; justify-content: center;" onclick="window.print()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span>دانلود نسخه نهایی و چاپی قرارداد (PDF)</span>
+          </button>
         </div>
       </section>
 

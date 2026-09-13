@@ -1,10 +1,9 @@
 <?php
 /**
- * Palette Agency - High-Performance In-Modal Checkout Engine
+ * Palette Agency - High-Performance In-Modal Checkout & Callback Engine
  * Project: Bartan Silverworks Contract Proposal
  */
 
-// Performance settings: disable unnecessary notices and memory buffering delays
 @ini_set('memory_limit', '256M');
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -15,13 +14,11 @@ session_start();
 define('SMSIR_API_KEY', 'LZEXvE6obhG6g6SH6JeiZPgAHb8fjVFUZiAYCIjKscJ2FZGb');
 define('SMSIR_TEMPLATE_ID', 519830);
 
-// Fast lazy-load helper for WordPress
 $wp_loaded = false;
 function load_wordpress_environment() {
     global $wp_loaded;
     if ($wp_loaded) return true;
 
-    // Define SHORTINIT or suppress heavy frontend actions where possible
     $possible_wp_paths = [
         dirname(__DIR__, 2) . '/wp-load.php',
         dirname(__DIR__, 3) . '/wp-load.php',
@@ -42,7 +39,7 @@ $raw_input = file_get_contents('php://input');
 $data = json_decode($raw_input, true) ?: $_POST;
 $action = isset($_GET['action']) ? $_GET['action'] : ($data['action'] ?? '');
 
-// 1. Send OTP + Warm-up User in Background
+// 1. Send OTP + Warm-up
 if ($action === 'send_otp') {
     $phone = clean_phone($data['phone'] ?? '');
     if (empty($phone) || strlen($phone) < 10) {
@@ -56,7 +53,6 @@ if ($action === 'send_otp') {
         'expire_at' => time() + 180
     ];
 
-    // Ultra-fast cURL to SMS.ir with IPv4 resolution
     $sms_payload = [
         'mobile' => $phone,
         'templateId' => SMSIR_TEMPLATE_ID,
@@ -84,7 +80,6 @@ if ($action === 'send_otp') {
     $response = curl_exec($ch);
     curl_close($ch);
 
-    // Warm-up WordPress in background while user receives and types OTP
     load_wordpress_environment();
     if ($wp_loaded) {
         $username = 'client_' . $phone;
@@ -112,7 +107,7 @@ if ($action === 'send_otp') {
     exit;
 }
 
-// 2. Verify OTP & Prepare Invoice
+// 2. Verify OTP
 if ($action === 'verify_otp') {
     $phone = clean_phone($data['phone'] ?? '');
     $code = trim($data['code'] ?? '');
@@ -182,7 +177,7 @@ if ($action === 'verify_otp') {
     exit;
 }
 
-// 3. Ultra-Fast Order & Gateway Execution
+// 3. Create Order & Execute Payment to Gateway
 if ($action === 'create_order_and_pay') {
     $phone = clean_phone($data['phone'] ?? '');
     $payment_mode = $data['payment_mode'] ?? 'cash';
@@ -198,12 +193,10 @@ if ($action === 'create_order_and_pay') {
     load_wordpress_environment();
 
     if ($wp_loaded && function_exists('wc_create_order')) {
-        // Fast customer ID fetch
         $username = 'client_' . $phone;
         $user = get_user_by('login', $username);
         $customer_id = $user ? $user->ID : get_current_user_id();
 
-        // Optimized order creation
         $order = wc_create_order([
             'customer_id' => $customer_id,
             'status'      => 'pending'
@@ -255,7 +248,6 @@ if ($action === 'create_order_and_pay') {
         $order->calculate_totals();
         $order->save();
 
-        // High-speed Gateway Execution
         if ($chosen_gateway && method_exists($chosen_gateway, 'process_payment')) {
             try {
                 $process_result = $chosen_gateway->process_payment($order->get_id());
@@ -295,4 +287,4 @@ function clean_phone($p) {
     return $p;
 }
 
-echo json_encode(['status' => 'Palette Fast Gateway Ready']);
+echo json_encode(['status' => 'Palette Gateway Ready']);

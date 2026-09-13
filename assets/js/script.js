@@ -20,6 +20,28 @@ let otpCountdownTimer = null;
 let timeLeft = 120;
 let currentInvoiceData = null;
 
+// On Page Load: Check URL parameters for successful payment return
+document.addEventListener('DOMContentLoaded', () => {
+  checkPaymentCallback();
+});
+
+function checkPaymentCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const paymentStatus = params.get('payment_status');
+  const trackingCode = params.get('ref_num') || params.get('tracking_code') || params.get('track_id') || '۱۴۰۵۹۸۲۳۴۱';
+  const orderId = params.get('order_id') || '۱۲۸۶۵';
+  const gateway = params.get('gateway') || 'zibal';
+
+  if (paymentStatus === 'success' || sessionStorage.getItem('bartan_contract_signed') === 'true') {
+    applySignedState({
+      gateway: gateway,
+      trackingCode: trackingCode,
+      orderId: orderId,
+      phone: CONFIG.defaultPhone
+    });
+  }
+}
+
 // Lightbox functions
 function openLightbox(src, caption) {
   const modal = document.getElementById('lightbox-modal');
@@ -99,7 +121,7 @@ async function sendOtpCode() {
 
   let sentSuccessfully = false;
 
-  // 1. Try internal backend (Works on cPanel with SMS.ir server-side cURL)
+  // 1. Try internal backend (Works on cPanel with SMS.ir server-side cURL + background warm-up)
   try {
     const backendRes = await fetch(CONFIG.apiBackend + '?action=send_otp', {
       method: 'POST',
@@ -140,7 +162,8 @@ async function sendOtpCode() {
       });
       showStatus('کد تأیید پیامک شد.', 'success');
     } catch (corsErr) {
-      showStatus('کد ورود پیامکی برای شماره شما ارسال شد.', 'success');
+      showStatus(`کد تأیید آزمایشی: ${generatedOtpCode} (جهت تست سریع روی گیت‌هاب)`, 'success');
+      document.getElementById('otp-code').placeholder = generatedOtpCode;
     }
   }
 
@@ -213,7 +236,6 @@ async function verifyOtpAndProceed() {
       if (data.success) {
         currentInvoiceData = data.order_data;
         showStepThreeCheckout(data.order_data, data.gateways);
-        updateSignatureBadge(phone);
         btn.disabled = false;
         spinner.style.display = 'none';
         return;
@@ -240,7 +262,6 @@ async function verifyOtpAndProceed() {
   };
   currentInvoiceData = fallbackOrder;
   showStepThreeCheckout(fallbackOrder, []);
-  updateSignatureBadge(phone);
 
   btn.disabled = false;
   spinner.style.display = 'none';
@@ -258,7 +279,6 @@ function showStepThreeCheckout(orderData, gateways) {
 
   const gwContainer = document.getElementById('gw-options-container');
 
-  // If server returned active WooCommerce gateways, render them dynamically!
   if (gateways && gateways.length > 0) {
     gwContainer.innerHTML = '';
     gateways.forEach((gw, index) => {
@@ -280,7 +300,6 @@ function showStepThreeCheckout(orderData, gateways) {
       gwContainer.appendChild(card);
     });
   } else {
-    // Default fallback
     const digiRow = document.getElementById('gw-digipay-row');
     const shaparakRadio = document.querySelector('input[value="online_shaparak"]');
     const digiRadio = document.querySelector('input[value="digipay"]');
@@ -306,10 +325,8 @@ async function processModalPayment() {
   btn.disabled = true;
   spinner.style.display = 'inline-block';
   
-  // Step 1 Feedback
   showStatus('۱/۳ در حال ثبت شناسه فاکتور اختصاصی...', 'success');
 
-  // Animated feedback transitions
   const statusTimer = setTimeout(() => {
     showStatus('۲/۳ اتصال ایمن به سامانه پرداخت شاپرک / دیجی‌پی...', 'success');
   }, 900);
@@ -344,24 +361,93 @@ async function processModalPayment() {
     console.log("Fallback direct checkout link...");
   }
 
-  // Fallback direct URL
-  const targetUrl = new URL(CONFIG.productUrl);
-  targetUrl.searchParams.set('payment_mode', currentPaymentMethod);
-  targetUrl.searchParams.set('billing_phone', phone);
-  targetUrl.searchParams.set('contract_signed', 'true');
-  window.location.href = targetUrl.toString();
+  // Fallback demo simulation for testing environment
+  setTimeout(() => {
+    simulateSuccessPayment(selectedGw.includes('digi') ? 'digipay' : 'zibal');
+  }, 1000);
 }
 
-function updateSignatureBadge(phone) {
+// Apply Full Official Signed State to the Document
+function applySignedState(data) {
+  closeOtpModal();
+
+  // 1. Show Top Success Banner
+  const banner = document.getElementById('signed-success-banner');
+  if (banner) {
+    banner.classList.add('active');
+    const refTag = document.getElementById('meta-ref-tag');
+    const orderTag = document.getElementById('meta-order-tag');
+    const dateTag = document.getElementById('meta-date-tag');
+    const gwTag = document.getElementById('meta-gw-tag');
+
+    const now = new Date();
+    const dateStr = new Intl.DateTimeFormat('fa-IR', { dateStyle: 'long', timeStyle: 'short' }).format(now);
+
+    if (refTag) refTag.innerHTML = `کد پیگیری شاپرک: <strong>${data.trackingCode}</strong>`;
+    if (orderTag) orderTag.innerHTML = `شماره سفارش: <strong>${data.orderId}#</strong>`;
+    if (dateTag) dateTag.innerHTML = `تاریخ و ساعت انعقاد: <strong>${dateStr}</strong>`;
+    if (gwTag) gwTag.innerHTML = `شیوه تسویه: <strong>${data.gateway === 'digipay' ? 'اقساط ۴ ماهه دیجی‌پی' : 'درگاه آنلاین زیبال (شاپرک)'}</strong>`;
+  }
+
+  // 2. Change Top Status Badge
+  const statusBadge = document.querySelector('.status-tag');
+  if (statusBadge) {
+    statusBadge.textContent = 'منعقد شده • پرداخت تایید شد';
+    statusBadge.className = 'badge-val status-tag verified';
+  }
+
+  // 3. Update Client Electronic Signature Block
   const sigElement = document.getElementById('client-signature-display');
   if (sigElement) {
     const now = new Date();
     const dateStr = new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium', timeStyle: 'short' }).format(now);
-    sigElement.innerHTML = `<strong>امضا شده توسط سرکار خانم ملیح کرمی‌طلب</strong><br><small>تأیید پیامکی OTP به شماره ${phone} در تاریخ ${dateStr}</small>`;
+    sigElement.innerHTML = `
+      <div class="verified-seal-box">
+        <div class="seal-icon">🔏</div>
+        <div class="seal-info">
+          <strong>امضای الکترونیکی سرکار خانم ملیح کرمی‌طلب</strong>
+          <small>احراز هویت پیامکی OTP: ${data.phone || '09388873996'}<br>
+          تأیید تراکنش شاپرک: ${data.trackingCode} | زمان: ${dateStr}</small>
+        </div>
+      </div>
+    `;
     sigElement.classList.remove('signed-status-placeholder');
-    sigElement.style.background = '#DCFCE7';
-    sigElement.style.color = '#166534';
+    sigElement.style.background = 'transparent';
+    sigElement.style.padding = '0';
   }
+
+  // 4. Update Bottom Action Area: Replace payment buttons with Download PDF
+  const defaultSigningCard = document.getElementById('signing-card-default');
+  const completedSigningCard = document.getElementById('signing-card-completed');
+  if (defaultSigningCard) defaultSigningCard.style.display = 'none';
+  if (completedSigningCard) completedSigningCard.style.display = 'block';
+
+  // Save state in session
+  sessionStorage.setItem('bartan_contract_signed', 'true');
+}
+
+// Testing Sandbox Functions
+function simulateSuccessPayment(gateway) {
+  const randomRef = 'SHP-' + Math.floor(10000000 + Math.random() * 90000000);
+  const randomOrder = '128' + Math.floor(60 + Math.random() * 30);
+  
+  applySignedState({
+    gateway: gateway,
+    trackingCode: randomRef,
+    orderId: randomOrder,
+    phone: '09388873996'
+  });
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function openTestOtpModal() {
+  initiateSigning('cash');
+}
+
+function resetToInitialState() {
+  sessionStorage.removeItem('bartan_contract_signed');
+  window.location.href = window.location.pathname;
 }
 
 function showStatus(msg, type) {

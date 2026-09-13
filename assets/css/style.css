@@ -1288,6 +1288,155 @@ body {
   margin-top: 4px;
 }
 
+/* Signed Contract Banner & Verified State */
+.signed-success-banner {
+  display: none;
+  background: linear-gradient(135deg, #064E3B 0%, #047857 100%);
+  color: #FFF;
+  border-radius: var(--radius-md);
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-md);
+}
+
+.signed-success-banner.active {
+  display: block;
+}
+
+.ssb-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.ssb-text h3 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ssb-text p {
+  font-size: 0.88rem;
+  opacity: 0.9;
+}
+
+.ssb-meta-tags {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.meta-pill {
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.btn-download-pdf-hero {
+  background: #FFF;
+  color: #064E3B;
+  border: none;
+  padding: 12px 22px;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: var(--transition-smooth);
+}
+
+.btn-download-pdf-hero:hover {
+  background: #ECFDF5;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+}
+
+/* Status tag states */
+.status-tag.verified {
+  background: #DCFCE7 !important;
+  color: #15803D !important;
+  font-weight: 800;
+}
+
+/* Test Mode Floating Switcher */
+.test-mode-bar {
+  background: #1E293B;
+  color: #FFF;
+  padding: 8px 16px;
+  font-size: 0.8rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #334155;
+}
+
+.test-btn {
+  background: #334155;
+  color: #F8FAFC;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.test-btn:hover {
+  background: #00AFA9;
+  border-color: #00AFA9;
+}
+
+.test-btn-reset {
+  background: #7F1D1D;
+  border-color: #991B1B;
+}
+
+.test-btn-reset:hover {
+  background: #B91C1C;
+}
+
+/* Electronic Verified Seal */
+.verified-seal-box {
+  background: #F0FDF4;
+  border: 1.5px solid #86EFAC;
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.seal-icon {
+  font-size: 1.8rem;
+}
+
+.seal-info strong {
+  display: block;
+  font-size: 0.88rem;
+  color: #166534;
+}
+
+.seal-info small {
+  font-size: 0.74rem;
+  color: #15803D;
+  line-height: 1.5;
+}
+
 /* Step 3: In-Modal Invoice & Gateways */
 .invoice-summary-card {
   background: #F9F8F5;
