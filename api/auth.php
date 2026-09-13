@@ -13,6 +13,7 @@ session_start();
 
 define('SMSIR_API_KEY', 'LZEXvE6obhG6g6SH6JeiZPgAHb8fjVFUZiAYCIjKscJ2FZGb');
 define('SMSIR_TEMPLATE_ID', 519830);
+define('SMSIR_SUCCESS_TEMPLATE_ID', 705349); // Congratulations & Contract Signed Template
 
 $wp_loaded = false;
 function load_wordpress_environment() {
@@ -277,6 +278,37 @@ if ($action === 'create_order_and_pay') {
         ]);
         exit;
     }
+}
+
+function send_contract_signed_sms($phone, $tracking_code, $order_id) {
+    if (empty($phone) || strlen($phone) < 10) return false;
+
+    $contract_url = 'https://palette.agency/contract/bartan/?payment_status=success&order_id=' . $order_id;
+    $sms_payload = [
+        'mobile' => $phone,
+        'templateId' => SMSIR_SUCCESS_TEMPLATE_ID,
+        'parameters' => [
+            ['name' => 'TRACKING', 'value' => (string)$tracking_code],
+            ['name' => 'URL', 'value' => $contract_url]
+        ]
+    ];
+
+    $ch = curl_init('https://api.sms.ir/v1/send/verify');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($sms_payload),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Accept: text/plain',
+            'x-api-key: ' . SMSIR_API_KEY
+        ],
+        CURLOPT_TIMEOUT => 6
+    ]);
+    $res = curl_exec($ch);
+    curl_close($ch);
+    return json_decode($res, true);
 }
 
 function clean_phone($p) {
